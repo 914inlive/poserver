@@ -2,84 +2,9 @@
 'use strict';
 
 /**
- * Module dependencies.
- */
-
-let app = require('../app');
-let debug = require('debug')('test:server');
-let http = require('http');
-
-/**
- * Get port from environment and store in Express.
- */
-
-let port = normalizePort(process.env.PORT || '4000');
-app.set('port', port);
-
-/**
- * Create HTTP/WS server.
- */
-
-let server = http.createServer(app);
-let WSServer = require('ws').Server;
-let wss = new WSServer({server: server});
-wss.on('connection', function connection(socket) {
-  console.log(`connection`);
-
-  socket.on('message', function incoming(msg) {
-    console.log(`received: ${msg}`);
-    socket.send(JSON.stringify({answer: 42}));
-  });
-
-  socket.on('open', function open() {
-    console.log('connected');
-  });
-
-  socket.on('close', function close() {
-    console.log('disconnected');
-  });
-
-  // Broadcast to everyone else.
-  /*wss.clients.forEach(function each(client) {
-    if (client !== socket && client.readyState === WebSocket.OPEN) {
-      client.send(data);
-    }
-  });*/
-});
-
-/**
- * Listen on provided port, on all network interfaces.
- */
-
-server.listen(port);
-server.on('error', onError);
-server.on('listening', onListening);
-
-/**
- * Normalize a port into a number, string, or false.
- */
-
-function normalizePort(val) {
-  let port = parseInt(val, 10);
-
-  if (isNaN(port)) {
-    // named pipe
-    return val;
-  }
-
-  if (port >= 0) {
-    // port number
-    return port;
-  }
-
-  return false;
-}
-
-/**
  * Event listener for HTTP server "error" event.
  */
-
-function onError(error) {
+const onError = (error) => {
   if (error.syscall !== 'listen') {
     throw error;
   }
@@ -101,16 +26,64 @@ function onError(error) {
     default:
       throw error;
   }
-}
+};
 
 /**
- * Event listener for HTTP server "listening" event.
+ * Module dependencies.
  */
+let config = require('./config');
+let app = require('../app');
+let fs = require('fs');
+let debug = require('debug')('test:server');
+let http = require('http');
+let https = require('https');
+let ws = require('ws').Server;
 
-function onListening() {
-  let addr = server.address();
-  let bind = typeof addr === 'string'
-    ? 'pipe ' + addr
-    : 'port ' + addr.port;
-  debug('Listening on ' + bind);
-}
+/**
+ * Create HTTP/HTTPS/WS server.
+ */
+let httpServer = http.createServer(app);
+let httpsServer = https.createServer({
+  key: fs.readFileSync(config.ssl.key),
+  cert: fs.readFileSync(config.ssl.cert),
+}, app);
+let wsServer = new ws({server: httpServer});
+wsServer.on('connection', (socket) => {
+  console.log(`connection`);
+
+  socket.on('message', (msg) => {
+    console.log(`received: ${msg}`);
+    socket.send(JSON.stringify({answer: 42}));
+  });
+
+  socket.on('close', () => {
+    console.log('disconnected');
+  });
+
+  // Broadcast to everyone else.
+  /*wss.clients.forEach(function each(client) {
+    if (client !== socket && client.readyState === WebSocket.OPEN) {
+      client.send(data);
+    }
+  });*/
+});
+
+/**
+ * Listen on provided port, on all network interfaces.
+ */
+httpServer.listen(config.httpPorts[0]);
+httpServer.on('error', onError);
+httpServer.on('listening', () => {
+  let addr = httpServer.address();
+  let bind = typeof addr === 'string' ? 'pipe ' + addr : 'port ' + addr.port;
+  console.log(`Listening on ${bind}`);
+});
+
+httpsServer.listen(config.httpsPorts[0]);
+httpsServer.on('error', onError);
+httpsServer.on('listening', () => {
+  let addr = httpsServer.address();
+  let bind = typeof addr === 'string' ? 'pipe ' + addr : 'port ' + addr.port;
+  console.log(`Listening on ${bind}`);
+});
+
